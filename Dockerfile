@@ -31,7 +31,11 @@ RUN apt-get update && apt-get install -y \
     procps \
     tmux \
     lsof \
+    xvfb \
     && rm -rf /var/lib/apt/lists/*
+
+# Set Display Variable
+ENV DISPLAY=:99
 
 # Install Docker CLI only (uses host Docker daemon via mounted socket)
 # We don't need docker-ce (daemon) or containerd.io since we use the host's Docker
@@ -90,6 +94,10 @@ ENV BUN_INSTALL="/home/coder/.bun"
 # Node.js is available via the NVM default symlink created above
 ENV PATH="$BUN_INSTALL/bin:$NVM_DIR/default:/home/coder/.local/bin:/home/coder/.sdkman/candidates/java/current/bin:$PATH"
 ENV JAVA_HOME="/home/coder/.sdkman/candidates/java/current"
+
+# Install chromium and dependencies
+RUN npm install playwright@1.62
+RUN npx playwright install-deps chromium
 
 # Install OpenCode V2 globally
 # The package postinstall selects the native binary for the platform

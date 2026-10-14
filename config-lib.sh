@@ -228,6 +228,8 @@ build_common_docker_args() {
             DOCKER_COMMON_ARGS+=(-e "$term_var=${!term_var}")
         fi
     done
+
+    return 0
 }
 
 # Build standard volume mount arguments for OpenCode directories
@@ -284,6 +286,9 @@ build_standard_volume_args() {
     if [ -d "$HOME/.local/state/opencode" ]; then
         VOLUME_ARGS+=(-v "$HOME/.local/state/opencode:/home/coder/.local/state/opencode")
     fi
+
+    # Full cache
+    VOLUME_ARGS+=(-v "$HOME/.cache:/home/coder/.cache")
 
     # OpenCode provider package cache (improves startup time and prevents API errors)
     # See: https://opencode.ai/docs/troubleshooting/#ai_apicallerror-and-provider-package-issues
@@ -415,10 +420,20 @@ load_config() {
     while IFS='=' read -r key value; do
         [[ "$key" =~ ^[[:space:]]*# ]] && continue
         [[ "$key" =~ ^[[:space:]]*env\. ]] || continue
-        # Remove leading/trailing whitespace
+
+        # Remove leading/trailing whitespace from key and value
+        key="${key#"${key%%[![:space:]]*}"}"
+        key="${key%"${key##*[![:space:]]}"}"
         value="${value#"${value%%[![:space:]]*}"}"
         value="${value%"${value##*[![:space:]]}"}"
-        [ -n "$value" ] && CUSTOM_ENV_VARS+=("$value")
+
+        # Extract container variable name (remove "env." prefix)
+        local container_var="${key#env.}"
+        # Trim spaces from container_var (just in case)
+        container_var="${container_var// /}"
+
+        # Store as "container_var=source" (source is the RHS)
+        [ -n "$container_var" ] && [ -n "$value" ] && CUSTOM_ENV_VARS+=("$container_var=$value")
     done < "$CONFIG_FILE"
 
     # Read settings (lines starting with "setting.")
@@ -526,29 +541,47 @@ build_mount_args() {
 build_env_args() {
     DOCKER_ENV_ARGS=()
 
-    for var_name in "${CUSTOM_ENV_VARS[@]}"; do
-        # Validate variable name matches expected pattern
-        if ! [[ "$var_name" =~ ^[A-Z_][A-Z0-9_]*$ ]]; then
-            config_warning "Invalid variable name in config: $var_name (must be uppercase with underscores, skipping)"
+    for entry in "${CUSTOM_ENV_VARS[@]}"; do
+        # Split into container_var and source
+        local container_var="${entry%%=*}"
+        local source_raw="${entry#*=}"
+
+        # Trim whitespace from source
+        source_raw="${source_raw#"${source_raw%%[![:space:]]*}"}"
+        source_raw="${source_raw%"${source_raw##*[![:space:]]}"}"
+
+        # Validate container variable name
+        if ! [[ "$container_var" =~ ^[A-Z_][A-Z0-9_]*$ ]]; then
+            config_warning "Invalid container variable name: $container_var (must be uppercase with underscores, skipping)"
             continue
         fi
 
-        # Get the value from the current environment
-        local var_value="${!var_name}"
+        local value_to_set=""
 
-        # Only add if the variable is set in the environment
-        if [ -n "$var_value" ]; then
-            DOCKER_ENV_ARGS+=(-e "$var_name=$var_value")
+        # Check if source is quoted (starts and ends with double quote)
+        if [[ "$source_raw" =~ ^\"(.*)\"$ ]]; then
+            # Literal: extract the inner content
+            value_to_set="${BASH_REMATCH[1]}"
         else
-            config_warning "Environment variable '$var_name' not set in host environment (skipping)"
+            # Treat as host variable name
+            if [[ "$source_raw" =~ ^[A-Z_][A-Z0-9_]*$ ]] && [ -n "${!source_raw}" ]; then
+                value_to_set="${!source_raw}"
+            else
+                config_warning "Host variable '$source_raw' is not set or invalid (skipping)"
+                continue
+            fi
+        fi
+
+        if [ -n "$value_to_set" ]; then
+            DOCKER_ENV_ARGS+=(-e "$container_var=$value_to_set")
+        else
+            config_warning "Value for '$container_var' is empty (skipping)"
         fi
     done
 
-    # Handle SSH agent forwarding if enabled
-    if [ "$SSH_AGENT_SUPPORT" = true ]; then
-        if [ -n "$SSH_AUTH_SOCK" ]; then
-            DOCKER_ENV_ARGS+=(-e "SSH_AUTH_SOCK=$SSH_AUTH_SOCK")
-        fi
+    # SSH agent forwarding (unchanged)
+    if [ "$SSH_AGENT_SUPPORT" = true ] && [ -n "$SSH_AUTH_SOCK" ]; then
+        DOCKER_ENV_ARGS+=(-e "SSH_AUTH_SOCK=$SSH_AUTH_SOCK")
     fi
 }
 
