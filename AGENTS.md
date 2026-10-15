@@ -202,4 +202,4 @@ env.aws_bedrock=AWS_BEARER_TOKEN_BEDROCK
 | `~/.bun/install/cache/` | `/home/coder/.bun/install/cache/` | rw | Bun install cache |
 | `~/.claude/` | `/home/coder/.claude/` | ro | Claude Code compat: CLAUDE.md rules, skills/ |
 | `~/.agents/` | `/home/coder/.agents/` | ro | Agent-compatible skills (skills/<name>/SKILL.md) |
-| `/var/run/docker.sock` | `/var/run/docker.sock` | rw | Docker socket |
+| `/var/run/docker.sock` | `/var/run/docker.sock` | rw | Docker socket (only when `setting.docker_support=true`) |

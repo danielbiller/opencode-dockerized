@@ -75,6 +75,7 @@ declare -a DOCKER_ENV_ARGS=()    # Array of docker -e arguments (populated by bu
 declare -a VOLUME_ARGS=()        # Array of standard volume mount arguments (populated by build_standard_volume_args)
 declare -a GIT_WORKTREE_ARGS=()  # Array of docker args for git worktree support (populated by build_git_worktree_args)
 SSH_AGENT_SUPPORT=false          # Boolean flag for SSH agent forwarding support
+DOCKER_SUPPORT=false             # Boolean flag for Docker socket (Docker-in-Docker) support
 
 # ============================================
 # SHARED HELPERS
@@ -353,7 +354,16 @@ build_standard_volume_args() {
     fi
 
     # Docker socket (optional, for Docker-in-Docker operations)
-    if [ "$include_docker_socket" = true ] && [ -S /var/run/docker.sock ]; then
+    # Mounted only when the command requests it AND Docker support is enabled
+    # (setting.docker_support=true). Off by default: the socket grants full
+    # control of the host Docker daemon. DOCKER_SOCKET=true|false overrides
+    # the config file for one run, in either direction.
+    local mount_docker_socket=false
+    if [ "$include_docker_socket" = true ] && [ "$DOCKER_SUPPORT" = true ]; then
+        mount_docker_socket=true
+    fi
+    [ -n "${DOCKER_SOCKET:-}" ] && mount_docker_socket="$DOCKER_SOCKET"
+    if [ "$mount_docker_socket" = true ] && [ -S /var/run/docker.sock ]; then
         VOLUME_ARGS+=(-v /var/run/docker.sock:/var/run/docker.sock)
     fi
 }
@@ -378,6 +388,13 @@ init_config_file() {
 # SSH Agent Forwarding (enables git over SSH in container)
 # Automatically mounts SSH_AUTH_SOCK socket and passes the environment variable
 # setting.ssh_agent_support=false
+
+# Docker Socket Support (enables Docker-in-Docker in container)
+# When enabled, mounts /var/run/docker.sock so agents can build images,
+# run containers, and use Testcontainers. Grants full control of the host
+# Docker daemon, so leave disabled unless a project needs it.
+# Can be overridden per-run with DOCKER_SOCKET=true|false.
+# setting.docker_support=false
 
 # Custom volume mounts (read-only by default)
 # Format: mount.<name>=<host_path>:<container_path>[:rw]
@@ -438,6 +455,7 @@ load_config() {
 
     # Read settings (lines starting with "setting.")
     SSH_AGENT_SUPPORT=false
+    DOCKER_SUPPORT=false
     while IFS='=' read -r key value; do
         [[ "$key" =~ ^[[:space:]]*# ]] && continue
         [[ "$key" =~ ^[[:space:]]*setting\. ]] || continue
@@ -445,6 +463,7 @@ load_config() {
         value="${value#"${value%%[![:space:]]*}"}"
         value="${value%"${value##*[![:space:]]}"}"
         [[ "$key" =~ ssh_agent_support ]] && [[ "$value" == "true" ]] && SSH_AGENT_SUPPORT=true
+        [[ "$key" =~ docker_support ]] && [[ "$value" == "true" ]] && DOCKER_SUPPORT=true
     done < "$CONFIG_FILE"
 
     return 0
@@ -462,6 +481,10 @@ save_config() {
         echo "# SSH Agent Forwarding (enables git over SSH in container)"
         echo "# Automatically mounts SSH_AUTH_SOCK socket and passes the environment variable"
         echo "setting.ssh_agent_support=$SSH_AGENT_SUPPORT"
+        echo ""
+        echo "# Docker Socket Support (enables Docker-in-Docker in container)"
+        echo "# Mounts /var/run/docker.sock (full control of the host Docker daemon)"
+        echo "setting.docker_support=$DOCKER_SUPPORT"
         echo ""
         echo "# Custom volume mounts (read-only by default)"
         echo "# Format: mount.<name>=<host_path>:<container_path>[:rw]"
@@ -849,12 +872,46 @@ prompt_ssh_agent_support() {
     fi
 }
 
+# Interactive Docker socket support prompt
+# If DOCKER_SUPPORT is already set (from a previous config), show current value
+# and only ask if user wants to change it
+prompt_docker_support() {
+    echo ""
+    config_info "Docker Socket Support"
+
+    if [ "$DOCKER_SUPPORT" = true ]; then
+        config_success "Docker socket support is currently enabled"
+        read -r -p "Keep Docker socket support enabled? (Y/n): " docker_sock
+        if [[ "$docker_sock" =~ ^[Nn]$ ]]; then
+            DOCKER_SUPPORT=false
+            config_info "Docker socket support disabled"
+        else
+            config_success "Docker socket support remains enabled"
+        fi
+    else
+        echo "Enable this if agents need Docker inside the container (building images,"
+        echo "running containers, Testcontainers). This mounts /var/run/docker.sock,"
+        echo "which grants full control of the host Docker daemon — leave it off otherwise."
+        echo ""
+
+        read -r -p "Enable Docker socket support? (y/N): " docker_sock
+        if [[ "$docker_sock" =~ ^[Yy]$ ]]; then
+            DOCKER_SUPPORT=true
+            config_success "Docker socket support enabled"
+        else
+            DOCKER_SUPPORT=false
+            config_info "Docker socket support disabled"
+        fi
+    fi
+}
+
 # Print current configuration (for debugging/info)
 print_config() {
     echo ""
     echo "Current configuration:"
     echo "  Config file: $CONFIG_FILE"
     echo "  SSH agent forwarding: $SSH_AGENT_SUPPORT"
+    echo "  Docker socket support: $DOCKER_SUPPORT"
 
     if [ ${#CUSTOM_MOUNTS[@]} -gt 0 ]; then
         echo ""
@@ -898,6 +955,7 @@ interactive_config_setup() {
         append|overwrite)
             [ "$CONFIG_MODE" = "append" ] && load_config
             prompt_ssh_agent_support
+            prompt_docker_support
             prompt_custom_mounts
             prompt_env_vars
             save_config
@@ -907,9 +965,10 @@ interactive_config_setup() {
             read -r -p "Would you like to configure custom mounts and environment variables now? (y/N): " setup_custom
             if [[ "$setup_custom" =~ ^[Yy]$ ]]; then
                 prompt_ssh_agent_support
+                prompt_docker_support
                 prompt_custom_mounts
                 prompt_env_vars
-                if [ ${#CUSTOM_MOUNTS[@]} -gt 0 ] || [ ${#CUSTOM_ENV_VARS[@]} -gt 0 ] || [ "$SSH_AGENT_SUPPORT" = true ]; then
+                if [ ${#CUSTOM_MOUNTS[@]} -gt 0 ] || [ ${#CUSTOM_ENV_VARS[@]} -gt 0 ] || [ "$SSH_AGENT_SUPPORT" = true ] || [ "$DOCKER_SUPPORT" = true ]; then
                     save_config
                     print_config
                 else

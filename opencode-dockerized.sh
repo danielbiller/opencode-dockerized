@@ -402,6 +402,7 @@ Commands:
 
 Environment Variables:
     DRY_RUN=true        Print the Docker command without executing it
+    DOCKER_SOCKET=true|false  Override Docker socket mounting for one run
 
 Examples:
     $0 run                          # Run in current directory
@@ -432,9 +433,10 @@ Security Features:
     - Non-root user: runs as non-root user inside container
     - Automatic cleanup: containers are removed on exit (--rm)
 
-Note: Docker socket is mounted for Docker-in-Docker support. This grants the
-container full access to the host Docker daemon. Disable by removing the socket
-mount in the config if not needed.
+Note: The Docker socket is mounted only when Docker support is enabled
+(setting.docker_support=true in the config, or DOCKER_SOCKET=true for one
+run). When mounted, the container has full access to the host Docker daemon.
+Leave it disabled unless agents need Docker inside the container.
 
 For more information, see README.md
 EOF

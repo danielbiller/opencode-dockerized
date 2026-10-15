@@ -248,6 +248,7 @@ TERM=xterm-256color
 | `~/.gradle/gradle.properties` | `/home/coder/.gradle/gradle.properties` | read-only | Gradle config (optional) |
 | `~/.npmrc` | `/home/coder/.npmrc` | read-only | NPM config (optional) |
 | `~/.mcp-auth/` | `/home/coder/.mcp-auth/` | read-only | MCP authentication (optional) |
+| `/var/run/docker.sock` | `/var/run/docker.sock` | read-write | Docker daemon access (optional, only when `setting.docker_support=true`) |
 
 #### Migrating V1 `tui.json` settings
 
@@ -270,6 +271,7 @@ Project-local `tui.json` files are not migrated; V2 client settings are global o
 **Advanced Users:** You can configure custom volume mounts and environment variables to be automatically mounted in the container for all projects. This is useful for:
 
 - **SSH agent forwarding**: Enable `setting.ssh_agent_support=true` for secure git over SSH (recommended)
+- **Docker socket access**: Enable `setting.docker_support=true` only if agents need Docker inside the container (disabled by default)
 - **Global git configuration**: Mount `~/.gitconfig` and global gitignore
 - **Environment variables**: Pass API keys and other credentials
 
@@ -318,6 +320,7 @@ env.context7=CONTEXT7_API_KEY
 
 **Note:** 
 - **SSH Agent Support**: Use `setting.ssh_agent_support=true` instead of manually mounting `~/.ssh` or passing `SSH_AUTH_SOCK`
+- **Docker Socket Support**: Use `setting.docker_support=true` to mount `/var/run/docker.sock` (off by default; grants full control of the host Docker daemon). Override per-run with `DOCKER_SOCKET=true|false`
 - Mounts are **read-only by default** (append `:rw` for read-write)
 - Paths use `~` which is expanded to your home directory at runtime
 - Environment variables must be set in your host environment to be passed
@@ -590,7 +593,7 @@ This significantly reduces risk while maintaining full functionality.
 
 ## ⚠️ Important Notes
 
-1. **Docker Socket**: Container uses host's Docker daemon via mounted socket (no privileged mode needed)
+1. **Docker Socket**: Container uses host's Docker daemon via mounted socket only when `setting.docker_support=true` (no privileged mode needed)
 2. **Network Access**: Container uses host network mode by default for convenience
 3. **Configuration Updates**: Config files are read-only. Modify on host and restart container
 4. **Persistent Data**: Only files in mounted project directory persist
@@ -642,7 +645,7 @@ const container = await new GenericContainer("postgres:15-alpine")
 
 ### Benefits
 
-✅ **Works out of the box** - No special configuration needed  
+✅ **Works once enabled** - Set `setting.docker_support=true`, no other configuration needed  
 ✅ **Fast performance** - Containers run directly on host (no nested virtualization)  
 ✅ **Shared images** - Downloaded images are shared with your host Docker  
 ✅ **Easy debugging** - Use `docker ps` and `docker logs` on your host to inspect test containers  

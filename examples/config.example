@@ -27,6 +27,14 @@
 #
 # setting.ssh_agent_support=true
 
+# Docker Socket Support
+# Enables Docker-in-Docker: agents can build images, run containers, and use
+# Testcontainers. Mounts /var/run/docker.sock, which grants full control of
+# the host Docker daemon — leave disabled unless a project needs it.
+# Can be overridden per-run with DOCKER_SOCKET=true|false.
+#
+# setting.docker_support=true
+
 # ============================================
 # Custom Volume Mounts
 # ============================================
