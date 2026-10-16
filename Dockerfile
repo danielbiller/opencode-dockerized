@@ -98,12 +98,15 @@ ENV JAVA_HOME="/home/coder/.sdkman/candidates/java/current"
 # Install chromium and dependencies
 RUN npm install playwright@1.62
 RUN npx playwright install-deps chromium
+RUN npm install -g @playwright/cli@latest
 
-# Install OpenCode V2 globally
-# The package postinstall selects the native binary for the platform
+# Install OpenCode V2 and OpenSpec globally
+# The opencode package postinstall selects the native binary for the platform
+# OpenSpec provides the 'openspec' CLI for spec-driven development
+# (run 'openspec init --tools opencode' once per project to install its slash commands)
 # ARG OPENCODE_BUILD_TIME is only passed during 'update' to bust cache
 ARG OPENCODE_BUILD_TIME=0
-RUN bash -c "source $NVM_DIR/nvm.sh && npm install -g @opencode/cli@latest"
+RUN bash -c "source $NVM_DIR/nvm.sh && npm install -g @opencode/cli@latest @fission-ai/openspec@latest"
 
 # Switch back to root for entrypoint setup
 USER root

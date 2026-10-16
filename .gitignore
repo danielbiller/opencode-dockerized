@@ -23,11 +23,10 @@ auth.json
 *.pem
 *.key
 credentials.json
-/.opencode/command/opsx-apply.md
-/.opencode/command/opsx-archive.md
-/.opencode/command/opsx-explore.md
-/.opencode/command/opsx-propose.md
-/.opencode/skills/openspec-apply-change/SKILL.md
-/.opencode/skills/openspec-archive-change/SKILL.md
-/.opencode/skills/openspec-explore/SKILL.md
-/.opencode/skills/openspec-propose/SKILL.md
+# OpenSpec generated workflow files (recreated per project by
+# 'openspec init --tools opencode' / 'openspec update' — do not commit).
+# Covers all 12 workflows (explore, propose, apply, update, sync, archive,
+# new, continue, ff, verify, bulk-archive, onboard), present and future.
+/.opencode/commands/opsx-*
+/.opencode/command/opsx-*
+/.opencode/skills/openspec-*/
